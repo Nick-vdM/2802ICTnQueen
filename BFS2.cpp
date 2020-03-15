@@ -194,6 +194,7 @@ std::vector<std::vector<short>> rotate(std::vector<std::vector<short>> v) {
 
 std::vector<Queen> permutations(Queen toRotate) {
     // TODO: Redefine this as returning the boards that
+    std::vector<Queen> perms;
     // are permutations
 //    if (toRotate.size() == 1) return 1;
 //    int perms = 2; // original + symmetrical
@@ -202,8 +203,7 @@ std::vector<Queen> permutations(Queen toRotate) {
 //    if (board != rotatedBoard) {
 //        perms += 2; // rotated, flipped
 //    }
-//    return perms;
-    return;
+    return perms;
 }
 
 int badBFS(int N) {
@@ -294,6 +294,7 @@ int HalfDFS(int N) {
     Queen INITIAL = Queen(N);
     std::stack<Queen> q;
     int possibleWays = 0;
+    std::vector<Queen> foundSolutions;
     q.push(INITIAL);
 
     while (!q.empty()) {
@@ -304,12 +305,16 @@ int HalfDFS(int N) {
 
         for (auto &board : nextBoards) {
             if (board.allQueensArePlaced()) {
-                possibleWays += permutations(board);
+                auto newSolutions = permutations(board);
+                foundSolutions.insert(foundSolutions.end(),
+                                      newSolutions.begin(),
+                                      newSolutions.end());
             } else {
                 q.push(board);
             }
         }
     }
+    possibleWays = foundSolutions.size();
     return possibleWays;
 }
 
@@ -341,183 +346,124 @@ int benchmark() {
 
 class LocalQueen {
 public:
-    LocalQueen() = default;
+    LocalQueen() = default; // just here so that nullptr is valid
 
-    explicit LocalQueen(const short N) : N{N}, nextRow{0} {
-        for (int i = 0; i < N; i++) {
-            board.push_back(std::vector<short>(N, 0));
-            evalBoard.push_back(std::vector<short>(N, 0));
-        }
-        evalBoard[0][0] = -1; // mark it as empty
+    explicit LocalQueen(const short N) : N{N}, value{-1} {
         randomFll();
     }
 
     LocalQueen(LocalQueen const &that) = default;
 
-    void placeQueenAt(short const &y, short const &x) {
-        board[y][x] = 1;
-        queens.push_back(std::array<short, 2>{y, x});
-    }
-
-    LocalQueen bestNextMove() {
-        // Counts how many positions are still free
-        // in each legal move and returns the 'best'
-        // legal move
-
-        initEvalBoard();
-        auto nextQueen = *this;
-        auto queenToMove = leastAttackedQueen(evalBoard);
-        auto newPosition = leastAttackedSquare(evalBoard);
-        nextQueen.swapQueenTo(queenToMove, newPosition);
-        return nextQueen;
+    LocalQueen bestNextBoard() {
+        std::vector<std::array<short, 2>> bestMoveYX = findBestMoves();
+        auto nextBoard = *this; // copy ctor does deep copy
+        int randMove = rand() % bestMoveYX.size();
+        nextBoard.move(bestMoveYX[randMove][0],
+                       bestMoveYX[randMove][1]);
+        return nextBoard;
     }
 
     int getValue() {
-        if (value == -1) {
-            calculateValue();
+        if (value == -1) { // if the current value isn't valid
+            value = evaluatePosition(queens);
         }
         return value;
     }
 
     void printBoard() {
-        std::cout << "============" << std::endl;
-        for (int i = 0; i < N; i++) {
-            for (int j = 0; j < N; j++) {
-                std::cout << " " << board[i][j];
+        // TODO: Rotate the print correctly
+        // currently printing the board rotated
+        for (int y = 0; y < N; y++) {
+            for (int x = 0; x < N; x++) {
+                if (x == queens[y]) {
+                    std::cout << "1 ";
+                } else {
+                    std::cout << "0 ";
+                }
             }
             std::cout << std::endl;
         }
-        std::cout << "============" << std::endl;
     }
 
 private:
-    std::vector<std::vector<short>> board;
-    std::vector<std::array<short, 2>> queens; // positional values
-    std::vector<std::vector<short>> evalBoard;
+    std::vector<short> queens;
     short N;
-    short nextRow;
     short value;
 
     void randomFll() {
         // randomly allocate queens to positions
         srand(42); // TODO: change to time(NULL)
         for (int i = 0; i < N; i++) {
-            short y = 0, x = 0;
-            do {
-                y = rand() % N, x = rand() % N;
-            } while (board[y][x] == 1); // if there's already a queen
-            placeQueenAt(y, x);
+            queens.push_back(rand() % N);
         }
     }
 
-    void incrementCross(const int y, const int x,
-                        std::vector<std::vector<short>> &v) {
-        // Increments a cross shape (diagonal + straight)
-        // around the given point and specifically avoid the point itself
-
+    bool queenExists(int y, int x) {
+        // checks if a queen is already at the given position
         for (int i = 0; i < N; i++) {
-            if (i != x) {
-                v[y][i]++; // vertical
-            }
-            if (i != y) {
-                v[i][x]++; // horizontal
+            if (y == i && x == queens[i]) {
+                return true;
             }
         }
-
-        // downwards diagonals
-        int a = x, b = x;
-        for (int i = y + 1; i < N; i++) {
-            a++;
-            b--;
-            if (a > N && b < 0) {
-                break; // both are out of bounds
-            } else if (a < N) {
-                v[i][a]++;
-            }
-            if (b >= 0) {
-                v[i][b]++;
-            }
-        }
-
-        //upwards diagonals
-        a = x, b = x;
-        for (int i = y - 1; i >= 0; i--) {
-            a++;
-            b--;
-            if (a > N && b < 0) {
-                break; // both are out of bounds
-            } else if (a < N) {
-                v[i][a]++;
-            }
-            if (b >= 0) {
-                v[i][b]++;
-            }
-        }
+        return false;
     }
 
-    void initEvalBoard() {
-        // Returns a vector that represents how many queens are currently
-        // attacking that position
+    short evaluatePosition(std::vector<short> const &queensToEval) {
+        // Sets value for the current position
+        short boardValue = 0;
         for (int i = 0; i < N; i++) {
-            for (int j = 0; j < N; j++) {
-                evalBoard[i][j] = 0;
-            }
-        }
-        for (int i = 0; i < N; i++) {
-            incrementCross(queens[i][0], queens[i][1], evalBoard);
-        }
-    };
-
-    std::array<short, 2> leastAttackedQueen(
-            const std::vector<std::vector<short>> &eval) {
-        std::array<short, 2> min = queens[0];
-        for (int i = 1; i < N; i++) {
-            if (evalBoard[queens[i][0]][queens[i][1]] <
-                evalBoard[min[0]][min[1]]) {
-                min[0] = queens[i][0];
-                min[1] = queens[i][1];
-            }
-        }
-        return min;
-    }
-
-    std::array<short, 2> leastAttackedSquare(
-            const std::vector<std::vector<short>> &eval) {
-        std::array<short, 2> position{0, 0}; // y x
-        for (int y = 1; y < N; y++) { // skip the first square
-            for (int x = 0; x < N; x++) {
-                if (eval[y][x] < eval[position[0]][position[1]]) {
-                    position[0] = y;
-                    position[1] = x;
+            for (int j = i + 1; j < N; j++) {
+                if (queens[i] == queens[j] ||
+                    std::abs(i - j) == abs(queens[i] - queens[j])) {
+                    boardValue++;
                 }
             }
         }
-        return position;
+        return boardValue;
     }
 
-    void swapQueenTo(std::array<short, 2> &from, std::array<short, 2> &to) {
-        // board position
-        std::swap(board[from[0]][from[1]], board[to[0]][to[1]]);
-        // coordinate position
-        from[0] = to[0];
-        from[1] = to[1];
-        // invalidate previous values
-        value = -1;
-        evalBoard[0][0] = -1;
+    short evaluatePosition(int y, int x) {
+        // value after moving to a specific piece
+        short changedPiece = queens[y];
+        queens[y] = x;
+        short futureValue = evaluatePosition(queens);
+        queens[y] = changedPiece;
+        return futureValue;
     }
 
-    void calculateValue() {
-        // TODO: Redefine this as 'the number of pairs attacking one another'
-        // sets the value variable based on the sum of the number of attacks
-        // queens are getting
-        if (evalBoard[0][0] == -1) {
-            // -1 in the top left signifies the board was 'cleared'
-            initEvalBoard();
-        }
-        value = 0;
+    std::vector<std::array<short, 2>> findBestMoves() {
+        // Generate a matrix of the price of all the moves
+        std::vector<std::vector<short>> evalBoard;
         for (int i = 0; i < N; i++) {
-            value += evalBoard[queens[i][0]][queens[i][1]];
+            evalBoard.emplace_back(N, std::numeric_limits<short>::max());
         }
+        // fill it
+        short minPrice = std::numeric_limits<short>::max();
+        for (int y = 0; y < N; y++) {
+            for (int x = 0; x < N; x++) {
+                if (queenExists(y, x)) {
+                    continue;
+                }
+                evalBoard[y][x] = evaluatePosition(y, x);
+                minPrice = std::min(evalBoard[y][x], minPrice);
+            }
+        }
+        // compile a list of the lowest price positions
+        std::vector<std::array<short, 2>> lowestPrices;
+        for (short y = 0; y < N; y++) {
+            for (short x = 0; x < N; x++) {
+                if (evalBoard[y][x] == minPrice) {
+                    std::array<short, 2> a{y, x};
+                    lowestPrices.push_back(a);
+                }
+            }
+        }
+        return lowestPrices;
+    }
+
+    void move(int y, int x) {
+        queens[y] = x;
+        value = -1; // invalidate value so it must be recalculated
     }
 };
 
@@ -525,7 +471,7 @@ LocalQueen simulatedAnnealing(int N) {
     // TODO: Add temperature
     LocalQueen current = LocalQueen(N);
     while (true) {
-        LocalQueen neighbour = current.bestNextMove();
+        LocalQueen neighbour = current.bestNextBoard();
         if (neighbour.getValue() <= current.getValue()) {
             return current;
         }
@@ -535,21 +481,43 @@ LocalQueen simulatedAnnealing(int N) {
 
 LocalQueen hillClimbingSearch(int N) {
     LocalQueen current = LocalQueen(N);
-    std::cout << "value = " << current.getValue() << std::endl;
-    current.printBoard();
     while (true) {
-        LocalQueen neighbour = current.bestNextMove();
-        std::cout << "value = " << current.getValue() << std::endl;
-        neighbour.printBoard();
-        if (neighbour.getValue() <= current.getValue()) {
+        LocalQueen neighbour = current.bestNextBoard();
+        if (neighbour.getValue() == 0) {
             return current;
         }
         current = neighbour;
     }
 }
 
+int benchmarkLocal() {
+    double totalTime = 0;
+    double minTime = std::numeric_limits<double>::max();
+    for (int i = 10; i <= 150; i++) {
+        auto startClock = std::chrono::high_resolution_clock::now();
+        // ==================MEASURED TIME=========================
+        hillClimbingSearch(20);
+        // ========================================================
+        auto endClock = std::chrono::high_resolution_clock::now();
+        double microseconds =
+                std::chrono::duration_cast<std::chrono::microseconds>
+                        (endClock - startClock).count();
+        minTime = std::min(minTime, microseconds);
+        totalTime += microseconds;
+        std::cout << "Took " << double(microseconds) / 1000000
+                  << " seconds to find a way for N = " << i
+                  << " to get solved" << std::endl;
+    }
+    std::cout << "The fastest time was" << minTime / 1000000
+              << std::endl;
+    std::cout << "The total time was " << totalTime / 1000000
+              << "microseconds" <<
+              std::endl;
+    return 0;
+}
+
 int main() {
-    hillClimbingSearch(4);
+    benchmarkLocal();
 //    benchmark();
     return 0;
 }
