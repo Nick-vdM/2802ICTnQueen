@@ -16,62 +16,21 @@
  * Comments on code style:
  * - I try to make my variable names informative enough to not explain
  * everything with comments, but it seems the rubric asks for comments to
- * make the code explanable.
- * - I seperated UninformedBoard and LocalBoard out of choice to simplify
- * each class. If they were merged, the order of the functions could be
- * confusing
+ * make the code explainable.
+ * - I separated UninformedBoard and LocalBoard out of choice to simplify
+ * each class for understanding. If they were merged, the order of the
+ * functions could be confusing. Additionally, I could use polymo
  */
 
-class UninformedBoard {
+class abstractBoard {
 public:
-    UninformedBoard() = default;
+    explicit abstractBoard(const short N) : N{N} {}
 
-    explicit UninformedBoard(short N) : N{N}, nextRow{0} {}
+    abstractBoard() = default;
 
-    UninformedBoard(UninformedBoard const &that) = default;
-
-    std::vector<UninformedBoard> possibleActions() {
-        findLegalRows();
-        std::vector<UninformedBoard> nextStates;
-        for (short i = 0; i < N; i++) {
-            if (choices[i] == false) {
-                continue;
-            }
-            UninformedBoard nextState = *this;
-            nextState.place(i);
-            nextStates.push_back(nextState);
-        }
-        return nextStates;
-    }
-
-    std::vector<UninformedBoard> halfPossibleActionsOnFirstLoop() {
-        // only get the first half of the possible actions
-        findHalfLegalRows();
-        std::vector<UninformedBoard> nextStates;
-        for (short i = 0; i < N; i++) {
-            if (choices[i] == false) {
-                continue;
-            }
-            UninformedBoard nextState = *this;
-            nextState.place(i);
-            nextStates.push_back(nextState);
-        }
-        return nextStates;
-    }
-
-    void place(short row) {
-        queens.push_back(row);
-        nextRow++;
-    }
-
-    bool allQueensArePlaced() {
-        return queens.size() == N;
-    }
+    virtual ~abstractBoard() = 0;
 
     void printBoard() {
-        // Note that this actually prints a rotated version of the board,
-        // however, this is only for visual checking and the rotated version
-        // is still valid. This just proves to be much more readable to print
         std::cout << "=========== N=" << N << " ===========" << std::endl;
         for (int y = 0; y < N; y++) {
             for (int x = 0; x < N; x++) {
@@ -86,32 +45,81 @@ public:
         std::cout << "==========================" << std::endl;
     }
 
-    std::vector<std::vector<short>> getBoard() {
-        /// generate the 2D representation of the board
-        // a short vector has less overhead than a boolean vector
-        // (24 bytes vs 40 bytes) so I picked a short instead
-        std::vector<std::vector<short>> board;
-        for (int i = 0; i < N; i++) {
-            board.emplace_back(N, 0);
-            board[i][queens[i]] = 1;
+protected:
+    std::vector<short> queens;
+    short N;
+};
+
+abstractBoard::~abstractBoard() {
+    // the compiler requires a definition to override it, but
+    // its pure virtual so create an empty definition
+}
+
+class UninformedBoard : public abstractBoard {
+    /// This board relies on building itself up; it starts empty
+    /// and returns possible next actions
+public:
+/////////////////////////////ctors//////////////////////////////////////////////
+    UninformedBoard() = default;
+
+    explicit UninformedBoard(const short N) :
+            abstractBoard::abstractBoard(N), nextRow{0} {}
+
+    UninformedBoard(UninformedBoard const &that) = default;
+
+    ~UninformedBoard() override = default;
+
+/////////////////////////////states/////////////////////////////////////////////
+    std::vector<UninformedBoard> possibleActions() {
+        std::vector<bool> choices = findLegalRows();
+        std::vector<UninformedBoard> nextStates;
+        for (short i = 0; i < N; i++) {
+            if (choices[i] == false) {
+                continue;
+            }
+            UninformedBoard nextState = *this;
+            nextState.place(i);
+            nextStates.push_back(nextState);
         }
-        return board;
+        return nextStates;
     }
 
-    std::vector<short> getQueens() {
+    std::vector<UninformedBoard> halfPossibleActionsOnFirstLoop() {
+        auto choices = findHalfLegalRows();
+        std::vector<UninformedBoard> nextStates;
+        for (short i = 0; i < N; i++) {
+            if (choices[i] == false) {
+                continue;
+            }
+            UninformedBoard nextState = *this;
+            nextState.place(i);
+            nextStates.push_back(nextState);
+        }
+        return nextStates;
+    }
+
+////////////////////////////tools///////////////////////////////////////////////
+    bool allQueensArePlaced() {
+        return queens.size() == N;
+    }
+
+    std::vector<short> getQueens() const {
         return queens;
     }
 
     friend bool operator==(UninformedBoard &L, UninformedBoard const &R);
 
 private:
-    std::vector<short> queens;
-    std::vector<bool> choices;
-    short N{};
     short nextRow{};
 
-    void findHalfLegalRows() {
-        choices = std::vector<bool>(N, true);
+    void place(short row) {
+        queens.push_back(row);
+        nextRow++;
+    }
+
+    std::vector<bool> findHalfLegalRows() {
+        // this constructor only gets accessed like this
+        auto choices = std::vector<bool>(N, true);
         if (nextRow == 0) {
             // automatically disable the second half
             for (int i = N / 2; i < N; i++) {
@@ -129,10 +137,11 @@ private:
                 choices[temp] = false;
             }
         }
+        return choices;
     }
 
-    void findLegalRows() {
-        choices = std::vector<bool>(N, true);
+    std::vector<bool> findLegalRows() {
+        auto choices = std::vector<bool>(N, true);
         for (short i = 0; i < nextRow; i++) {
             choices[queens[i]] = false;
             short temp = queens[i] + nextRow - i;
@@ -144,6 +153,7 @@ private:
                 choices[temp] = false;
             }
         }
+        return choices;
     }
 };
 
@@ -152,70 +162,65 @@ bool operator==(UninformedBoard &L, UninformedBoard const &R) {
     return L.queens == R.queens && L.N == R.N;
 }
 
-std::vector<std::vector<short>> flip(
-        std::vector<std::vector<short>> board) {
-    //reverse the elements
-    for (int i = 0; i < board.size(); i++) {
-        for (int j = 0; j < board.size() / 2; j++) {
-            std::swap(board[i][j], board[i][board.size() - j - 1]);
-        }
+std::vector<short> flip(std::vector<short> toFlip) {
+    // reverse the elements
+    for (int i = 0; i < toFlip.size() / 2; i++) {
+        std::swap(toFlip[i], toFlip[toFlip.size() - 1 - i]);
     }
-    return board;
+    return toFlip;
 }
 
-std::vector<std::vector<short>> rotate(std::vector<std::vector<short>> board) {
-    //transpose it
-    for (int i = 0; i < board.size(); i++) {
-        for (int j = i; j < board.size(); j++) {
-            std::swap(board[i][j], board[j][i]);
-        }
-    }
-    //reverse the elements
-    board = flip(board);
-    return board;
-}
-
-std::vector<short> compressBoard(std::vector<std::vector<short>> board) {
-    // reverses the getBoard option
-    std::vector<short> compressedBoard;
-    for (int i = 0; i < board.size(); i++) {
-        for (int j = 0; j < board.size(); j++) {
-            if (board[i][j] == 1) {
-                compressedBoard.push_back(j);
+std::vector<short> transpose(std::vector<short> const &toTranspose) {
+    // this one is a bit more complicated than reverse since the right index
+    // has to be found first
+    std::vector<short> newBoard;
+    newBoard.reserve(toTranspose.size());
+    for (int i = 0; i < toTranspose.size(); i++) {
+        for (int j = 0; j < toTranspose.size(); j++) {
+            if (toTranspose[j] == i) {
+                newBoard.push_back(j);
+                break;
             }
         }
     }
-    return compressedBoard;
+    return newBoard;
 }
 
-std::set<std::vector<short>> tripleRotation(
-        std::vector<std::vector<short>> board) {
-    std::set<std::vector<short>> rotations;
+std::set<std::vector<short>> getTripleRotation(
+        std::vector<short> board) {
+    std::set<std::vector<short>> toAddTo;
     for (int i = 0; i < 3; i++) {
-        rotations.insert(compressBoard(rotate(board)));
+        // to rotate we transpose and flip the board
+        board = transpose(board);
+        board = flip(board);
+        toAddTo.insert(board);
     }
-    return rotations;
+    return toAddTo;
 }
 
-std::set<std::vector<short>> permutations(UninformedBoard base) {
+std::set<std::vector<short>> permutations(UninformedBoard const &base) {
     // the maximum number of boards from a single board is 8.
     // base board + 3 rotations
     // flipped board + 3 rotations
     std::set<std::vector<short>> perms;
-    perms.insert(base.getQueens());
-    std::vector<std::vector<short>> initialBoard = base.getBoard();
-    std::set<std::vector<short>> temp; // to fill with rotations and copy in
+    // make a copy of queens to simplify this
+    std::vector<short> queens = base.getQueens();
+    // this STL's insert function with sets requires another set to already
+    // be made, we have to use an in between temp to store the values
+    std::set<std::vector<short>> temp;
 
-    temp = tripleRotation(initialBoard);
+    perms.insert(queens);
+    temp = getTripleRotation(queens);
     perms.insert(temp.begin(), temp.end());
 
-    initialBoard = flip(initialBoard);
-    temp = tripleRotation(initialBoard);
-    perms.insert(compressBoard(initialBoard));
+    queens = flip(queens);
+    perms.insert(queens);
+    temp = getTripleRotation(queens);
     perms.insert(temp.begin(), temp.end());
 
     return perms;
 }
+
 
 int badBFS(int N) {
     // This is the original BFS in the slides with checking for previous
@@ -342,56 +347,37 @@ int prunedDFS(int N) {
             if (board.allQueensArePlaced()) {
                 std::set<std::vector<short>> newWays = permutations(board);
                 possibleWays.insert(newWays.begin(), newWays.end());
-                if (N <= 6) {
-                    board.printBoard();
-                }
             } else {
                 stack.push(board);
             }
         }
     }
+    if (N <= 6) {
+        for (auto &b : possibleWays) {
+
+        }
+    }
     return possibleWays.size();
 }
 
-int benchmarkUninformed() {
-    // This is purely here for debugging specific cases. Ignore me!
-    int totalTime = 0;
-    int ways;
-    for (int i = 1; i <= 20; i++) {
-        auto startClock = std::chrono::high_resolution_clock::now();
-        // ==================MEASURED TIME=========================
-        //ways = badBFS(i);
-//        ways = BFS(i);
-        ways = prunedBFS(i);
-//        ways = DFS(i);
-//        ways = prunedDFS(i);
-        // ========================================================
-        auto endClock = std::chrono::high_resolution_clock::now();
-        double microseconds =
-                std::chrono::duration_cast<std::chrono::microseconds>
-                        (endClock - startClock).count();
-
-        totalTime += microseconds;
-        std::cout << "Took " << double(microseconds) / 1000000
-                  << " seconds to find that N = "
-                  << i << " has " << ways << " ways of being solved"
-                  << std::endl;
-    }
-    std::cout << "The total time was " << totalTime << std::endl;
-    return 0;
-}
-
-class LocalBoard {
+class LocalBoard : public abstractBoard {
+    /// This board starts in a random state and shifts queens until it is solved
 public:
+///////////////////////////////ctors////////////////////////////////////////////
+
     LocalBoard() = default; // just here so that nullptr is valid
 
-    explicit LocalBoard(const short N) : N{N}, value{-1} {
+    explicit LocalBoard(const short N) : abstractBoard{N}, value{-1} {
         randomFll();
     }
 
     LocalBoard(LocalBoard const &that) = default;
 
-    LocalBoard bestNextBoard() {
+    ~LocalBoard() override = default;
+
+///////////////////////////moves////////////////////////////////////////////////
+
+    LocalBoard bestNeighbour() {
         std::vector<std::array<short, 2>> bestMoveYX = findBestMoves();
         auto nextBoard = *this; // copy ctor does deep copy
         int randMove = rand() % bestMoveYX.size();
@@ -407,6 +393,8 @@ public:
         return nextBoard;
     }
 
+///////////////////////////tools////////////////////////////////////////////////
+
     int getValue() {
         if (value == -1) { // if the current value isn't valid
             value = evaluatePosition(queens);
@@ -414,32 +402,12 @@ public:
         return value;
     }
 
-    void printBoard() {
-        // Note that this actually prints a rotated version of the board,
-        // however, this is only for visual checking and the rotated version
-        // is still valid. This just proves to be much more readable to print
-        std::cout << "=========== N=" << N << " ===========" << std::endl;
-        for (int y = 0; y < N; y++) {
-            for (int x = 0; x < N; x++) {
-                if (x == queens[y]) {
-                    std::cout << "1 ";
-                } else {
-                    std::cout << "0 ";
-                }
-            }
-            std::cout << std::endl;
-        }
-        std::cout << "==========================" << std::endl;
-    }
-
 private:
-    std::vector<short> queens;
-    short N;
-    short value;
+    short value{-1};
 
     void randomFll() {
         // randomly allocate queens to positions
-        srand(42); // TODO: change to time(NULL)
+        srand(time(NULL)); // TODO: change to time(NULL)
         for (int i = 0; i < N; i++) {
             queens.push_back(rand() % N);
         }
@@ -550,12 +518,44 @@ private:
 int hillClimbingSearch(int N) {
     LocalBoard current = LocalBoard(N);
     while (true) {
-        LocalBoard neighbour = current.bestNextBoard();
+        LocalBoard neighbour = current.bestNeighbour();
         if (neighbour.getValue() == 0) {
             if (N <= 6) {
                 neighbour.printBoard();
             }
             return -1;
+        }
+        current = neighbour;
+    }
+}
+
+int hillClimbingSearchSS(int N) {
+    // Stochastic Search
+    short stuck = 0; // increased every time the cost is the same
+    short randomMoveAt = 10;
+    short previousCost = std::numeric_limits<short>::max();
+    LocalBoard current = LocalBoard(N);
+    while (true) {
+        LocalBoard neighbour = current.bestNeighbour();
+        if (neighbour.getValue() == previousCost) {
+            stuck++;
+            if (stuck == randomMoveAt) {
+                // pick a random move instead
+                neighbour = current.randomNeighbour();
+                randomMoveAt++; // increase this so it doesn't keep restarting
+                // forever
+            }
+        } else {
+            stuck = 0;
+            previousCost = neighbour.getValue();
+        }
+
+
+        if (neighbour.getValue() == 0) {
+            if (N <= 6) {
+                neighbour.printBoard();
+            }
+            return -1; // solution was found
         }
         current = neighbour;
     }
@@ -567,7 +567,7 @@ int hillClimbingSearchRR(int N) {
     short previousCost = std::numeric_limits<short>::max();
     LocalBoard current = LocalBoard(N);
     while (true) {
-        LocalBoard neighbour = current.bestNextBoard();
+        LocalBoard neighbour = current.bestNeighbour();
         if (neighbour.getValue() == previousCost) {
             stuck++;
             if (stuck == restartAt) {
@@ -594,7 +594,7 @@ int hillClimbingSearchRR(int N) {
 }
 
 int simulatedAnnealing(int N) {
-    double temp = 2800;
+    double temp = 10000; // 10000;
     double cooling = 0.98;
     double delta = 0; // used for calculating temperature
     double prob = 0;
@@ -636,7 +636,7 @@ int simulatedAnnealingRR(int N) {
     short stuck = 0; // increased every time the cost is the same
     short restartAt = 10;
     short previousCost = std::numeric_limits<short>::max();
-    double temp = 2800;
+    double temp = 0;
     double cooling = 0.98;
     double delta = 0; // used for calculating temperature
     double prob = 0;
@@ -686,32 +686,6 @@ int simulatedAnnealingRR(int N) {
     }
 }
 
-int benchmarkLocal() {
-    // This is purely here for debugging specific cases. Ignore me!
-    int totalTime = 0;
-    int ways;
-    for (int i = 1; i <= 20; i++) {
-        auto startClock = std::chrono::high_resolution_clock::now();
-        // ==================MEASURED TIME=========================
-//        hillClimbingSearch(i);
-//        hillClimbingSearchRR(i);
-//        simulatedAnnealing(i);
-//        simulatedAnnealingRR(i);
-        // ========================================================
-        auto endClock = std::chrono::high_resolution_clock::now();
-        double microseconds =
-                std::chrono::duration_cast<std::chrono::microseconds>
-                        (endClock - startClock).count();
-
-        totalTime += microseconds;
-        std::cout << "Took " << double(microseconds) / 1000000
-                  << " seconds to solve when N = "
-                  << i << std::endl;
-    }
-    std::cout << "The total time was " << totalTime << std::endl;
-    return 0;
-}
-
 int benchmarkFunction(int (*fun)(int), int lowerBound,
                       int upperBound, int increment) {
 
@@ -719,7 +693,10 @@ int benchmarkFunction(int (*fun)(int), int lowerBound,
     int ways = -1;
     double minTime = std::numeric_limits<double>::max();
     for (int i = lowerBound; i < upperBound; i += increment) {
-        if (i == 2 || i == 3) continue;
+        if (i == 2 || i == 3) {
+            std::cout << "There are no solutions for N = " << i << std::endl;
+            continue;
+        }
         auto startClock = std::chrono::high_resolution_clock::now();
         // ==================MEASURED TIME=========================
         ways = fun(i);
@@ -753,7 +730,9 @@ int benchmarkFunction(int (*fun)(int), int lowerBound,
 void openMessage() {
     std::cout
             << "================MONSTROUS nQUEEN SOLVER===================="
-            << "             ++Nick van der Merwe - s5151332 ++"
+            << std::endl
+            << "++Nick van der Merwe - s5151332 ++"
+            << std::endl
             << "Hello and welcome to the MONSTROUS nQueen Solver "
             << std::endl
             << "I hope this gives you the fastest benchmarks out of anyone. "
@@ -782,27 +761,31 @@ void printAlgorithms() {
             << "'DFS' => DFS without checking back. This bad boy can just "
             << std::endl
             << "keep running to N = 100 (given several years)"
+            << std::endl
             << "'pDFS' => prune DFS - DFS with added pruning. Utilises "
                "rotations " << std::endl << "to count more boards"
-            << std::endl
             << std::endl << std::endl
             << "===================Local Searches========================"
             << std::endl
             << "'HC' => Hill-climbing - exactly what's on the tin"
+            << std::endl
+            << "'HCSS' => Hill-climbing stochastic search; does a random move"
+            << std::endl
+            << " when stuck"
+            << std::endl
+            << "'HCRR' => Hill-climbing random restart - it's alright, but eh"
             << std::endl
             << "'SA' => Simulated Annealing - **DANGER: High chance of "
             << std::endl
             << "getting stuck at N <= 30. Only use 30 x x to not risk it"
             << std::endl
             << "'SARR' => Simulated Annealing Random Restart - use with N=200+"
-            << std::endl
-            << "'HCRR' => Hill-climbing random restart - it's alright, but eh"
-            << std::endl << ">";
+            << std::endl;
 
 }
 
 int handleUserInput() {
-
+    std::cout << ">"; // prompt the user
     std::string request;
     std::cin >> request;
     // make everything lowercase
@@ -821,12 +804,14 @@ int handleUserInput() {
         return 4;
     } else if (request == "hc") {
         return 5;
-    } else if (request == "sa") {
+    } else if (request == "hcss") {
         return 6;
-    } else if (request == "sarr") {
-        return 7;
     } else if (request == "hcrr") {
+        return 7;
+    } else if (request == "sa") {
         return 8;
+    } else if (request == "sarr") {
+        return 9;
     } else {
         std::cout << "That's an invalid choice! If you can't get this program"
                   << std::endl
@@ -834,8 +819,8 @@ int handleUserInput() {
                   << std::endl
                   << "time on it :) and would complain if you gave him a zero"
                   << std::endl
-                  << " because it doesn't work. nick.vandermerwe@griffith.edu"
-                     ".au" << std::endl;
+                  << " because it doesn't work. nick.vandermerwe@griffithuni"
+                     ".edu.au" << std::endl;
         return -1;
     }
 }
@@ -859,8 +844,6 @@ void runRequest(int choice) {
             << "\t Example 2: '10 151 10' tests every tenth number from "
             << std::endl
             << "\t \t10 -> 150. That is: 10, 20, 30, 40, 50..."
-            << std::endl
-            << "**Note: if a benchmarkUninformed got skipped its because there is no "
             << std::endl
             << "solution. e.g. 2 4 1 will print nothing :)"
             << std::endl << ">";
@@ -887,16 +870,20 @@ void runRequest(int choice) {
         benchmarkFunction(hillClimbingSearch, lowerBound, upperBound,
                           increment);
     } else if (choice == 6) {
-        //sa
-        benchmarkFunction(simulatedAnnealing, lowerBound, upperBound,
+        // hcss
+        benchmarkFunction(hillClimbingSearchSS, lowerBound, upperBound,
                           increment);
     } else if (choice == 7) {
-        // sarr
-        benchmarkFunction(simulatedAnnealingRR, lowerBound, upperBound,
+        // hsrr
+        benchmarkFunction(hillClimbingSearchRR, lowerBound, upperBound,
                           increment);
     } else if (choice == 8) {
-        // hcrr
-        benchmarkFunction(hillClimbingSearchRR, lowerBound, upperBound,
+        // sa
+        benchmarkFunction(simulatedAnnealing, lowerBound, upperBound,
+                          increment);
+    } else if (choice == 9) {
+        // sarr
+        benchmarkFunction(simulatedAnnealingRR, lowerBound, upperBound,
                           increment);
     }
     std::cout << "You can request another function (e.g. bfs)!" <<
