@@ -18,8 +18,16 @@
  * everything with comments, but it seems the rubric asks for comments to
  * make the code explainable.
  * - I separated UninformedBoard and LocalBoard out of choice to simplify
- * each class for understanding. If they were merged, the order of the
- * functions could be confusing. Additionally, I could use polymo
+ * each class for understanding, and created an abstract board contianing
+ * common methods
+ * - Usually I would make a master function that can do each search with
+ * variables on which search to do so that you can combine/mix searches as
+ * you wish. However, making a seperate function for each search makes it
+ * easier for you (the marker) to see each search properly - despite it
+ * making this file much longer.
+ * - I would normally seperate each section into different files (e.g.
+ * uninformed searches in one file, and local searches in the other), but
+ * usually markers struggle more with running the program whenever I do that
  */
 
 class abstractBoard {
@@ -393,6 +401,42 @@ public:
         return nextBoard;
     }
 
+////////////////////////////sexy time///////////////////////////////////////////
+    static LocalBoard reproduce(LocalBoard &father, LocalBoard mother) {
+        // uses random cross over point
+        int point = rand() % father.queens.size();
+        LocalBoard child;
+        for (int i = 0; i < point; i++) {
+            child.queens.push_back(father.queens[i]);
+        }
+        for (int i = point; i < mother.queens.size(); i++) {
+            child.queens.push_back(father.queens[i]);
+        }
+        return child;
+        /* Ethan's crazy way of doing this - Ordered Crossover operator
+         *        LocalBoard child(mother.queens.size());
+        child.queens = mother.queens;
+        int start, end;
+        do {
+            start = rand() % father.queens.size();
+            end = rand() % father.queens.size();
+        } while (start != 0 && end > start);
+
+        child.queens[start - 1] = child.queens[end];
+        // insert daddy into mummy's egg to make child :D
+        for (int i = start; i <= end; i++) {
+            child.queens[i] = father.queens[i];
+        }
+        return child;
+
+         */
+    }
+
+    static void mutate(LocalBoard &board) {
+        board.queens[rand() % board.queens.size()] =
+                rand() % board.queens.size();
+    }
+
 ///////////////////////////tools////////////////////////////////////////////////
 
     int getValue() {
@@ -407,7 +451,7 @@ private:
 
     void randomFll() {
         // randomly allocate queens to positions
-        srand(time(NULL)); // TODO: change to time(NULL)
+        srand(time(NULL));
         for (int i = 0; i < N; i++) {
             queens.push_back(rand() % N);
         }
@@ -509,6 +553,7 @@ private:
         return lowestPrices;
     }
 
+
     void move(int y, int x) {
         queens[y] = x;
         value = -1; // invalidate value so it must be recalculated
@@ -594,37 +639,37 @@ int hillClimbingSearchRR(int N) {
 }
 
 int simulatedAnnealing(int N) {
-    double temp = 10000; // 10000;
+    double temp = 10000;
     double cooling = 0.98;
     double delta = 0; // used for calculating temperature
     double prob = 0;
+    int iterations = 10;
     LocalBoard current = LocalBoard(N);
     while (true) {
-        LocalBoard neighbour = current.randomNeighbour();
+        for (int i = 0; i < iterations; i++) {
+            LocalBoard neighbour = current.randomNeighbour();
 
-        if (neighbour.getValue() == 0) {
-            if (N <= 6) {
-                neighbour.printBoard();
+            if (neighbour.getValue() == 0) {
+                return -1; // the solution was found
             }
-            return -1; // the solution
-        }
 
-        delta = (double) (neighbour.getValue() - current.getValue())
-                / current.getValue();
-        if (neighbour.getValue() <= current.getValue()) {
-            current = neighbour;
-        } else {
-            // if its worse work out a chance to keep it
-            double roll = ((double) rand() / RAND_MAX);
-            if (temp != 0) {
-                // avoid division by 0
-                prob = std::pow(std::exp(1.0), -delta / temp);
+            delta = (double) (neighbour.getValue() - current.getValue())
+                    / current.getValue();
+            if (neighbour.getValue() <= current.getValue()) {
+                current = neighbour;
             } else {
-                prob = 0;
-            }
+                // if its worse work out a chance to keep it
+                double roll = ((double) rand() / RAND_MAX);
+                if (temp != 0) {
+                    // avoid division by 0
+                    prob = std::exp(-delta / temp);
+                } else {
+                    prob = 0;
+                }
 
-            if (roll < prob) {
-                current = neighbour; // keep the change
+                if (roll < prob) {
+                    current = neighbour; // keep the change
+                }
             }
         }
         temp *= cooling;
@@ -640,57 +685,120 @@ int simulatedAnnealingRR(int N) {
     double cooling = 0.98;
     double delta = 0; // used for calculating temperature
     double prob = 0;
+    int iterations = 100;
     LocalBoard current = LocalBoard(N);
     while (true) {
-        LocalBoard neighbour = current.randomNeighbour();
-        if (neighbour.getValue() == previousCost) {
-            stuck++;
-            if (stuck == restartAt) {
-                // clear the board and start again
-                current = LocalBoard(N);
-                neighbour = current.randomNeighbour();
-                restartAt++; // increase this so it doesn't keep restarting
-                // forever
-            }
-        } else {
-            stuck = 0;
-            previousCost = neighbour.getValue();
-        }
-
-        if (neighbour.getValue() == 0) {
-            if (N <= 6) {
-                neighbour.printBoard();
-            }
-            return -1; // the solution got found
-        }
-
-        delta = (double) (neighbour.getValue() - current.getValue())
-                / current.getValue();
-        if (neighbour.getValue() <= current.getValue()) {
-            current = neighbour;
-        } else {
-            // if its worse work out a chance to keep it
-            double roll = ((double) rand() / RAND_MAX);
-            if (temp != 0) {
-                // avoid division by 0
-                prob = std::pow(std::exp(1.0), -delta / temp);
+        for (int i = 0; i < iterations; i++) {
+            LocalBoard neighbour = current.randomNeighbour();
+            if (neighbour.getValue() == previousCost) {
+                stuck++;
+                if (stuck == restartAt) {
+                    // clear the board and start again
+                    current = LocalBoard(N);
+                    neighbour = current.randomNeighbour();
+                    restartAt++; // increase this so it doesn't keep restarting
+                    // forever
+                }
             } else {
-                prob = 0;
+                stuck = 0;
+                previousCost = neighbour.getValue();
             }
 
-            if (roll < prob) {
-                current = neighbour; // keep the change
+            if (neighbour.getValue() == 0) {
+                if (N <= 6) {
+                    neighbour.printBoard();
+                }
+                return -1; // the solution got found
+            }
+
+            delta = (double) (neighbour.getValue() - current.getValue())
+                    / current.getValue();
+            if (neighbour.getValue() <= current.getValue()) {
+                current = neighbour;
+            } else {
+                // if its worse work out a chance to keep it
+                double roll = ((double) rand() / RAND_MAX);
+                if (temp != 0) {
+                    // avoid division by 0
+                    prob = std::exp(-delta / temp);
+                } else {
+                    prob = 0;
+                }
+
+                if (roll < prob) {
+                    current = neighbour; // keep the change
+                }
             }
         }
         temp *= cooling;
     }
 }
 
+struct indirectBoardComparator {
+public:
+    indirectBoardComparator(std::vector<LocalBoard> &population) :
+            population{population} {}
+
+    bool operator()(int &i1, int &i2) {
+        return population[i1].getValue() > population[i2].getValue();
+    }
+
+private:
+    std::vector<LocalBoard> &population;
+};
+
+int tournamentIndex(std::vector<LocalBoard> &population) {
+    std::vector<int> indexes;
+    indexes.reserve(population.size());
+    for (int i = 0; i < population.size() / 8; i++) {
+        indexes.push_back(rand() % population.size());
+    }
+    return *std::max_element(indexes.begin(),
+                             indexes.end(), indirectBoardComparator(population));
+}
+
+void printValue(std::vector<LocalBoard> &population) {
+    int sum = 0;
+    std::vector<int> values;
+    for (auto &person : population) {
+        sum += person.getValue();
+        values.push_back(person.getValue());
+    }
+    double averageValue = (double) sum / population.size();
+    std::cout << "The average person is worth " << averageValue << std::endl;
+}
+
+int genetic(int N) {
+    srand(time(NULL));
+    double mutationChance = 0.1;
+    std::vector<LocalBoard> population(N * 100, LocalBoard(N));
+    while (true) {
+//        printValue(population);
+        std::vector<LocalBoard> newPopulation;
+        for (int i = 0; i < population.size(); i++) {
+            auto p1 = tournamentIndex(population);
+            auto p2 = tournamentIndex(population);
+
+            auto child = LocalBoard::reproduce(population[p1], population[p2]);
+
+            double mutationHappens = ((double) rand() / RAND_MAX);
+            if (mutationHappens < mutationChance) {
+                LocalBoard::mutate(child);
+            }
+            newPopulation.push_back(child);
+            if (child.getValue() == 0) return -1; // solution!
+        }
+        population = newPopulation;
+    }
+
+    return 0;
+}
+
 int benchmarkFunction(int (*fun)(int), int lowerBound,
                       int upperBound, int increment) {
 
     double totalTime = 0;
-    int ways = -1;
+    int ways;
     double minTime = std::numeric_limits<double>::max();
     for (int i = lowerBound; i < upperBound; i += increment) {
         if (i == 2 || i == 3) {
@@ -777,11 +885,12 @@ void printAlgorithms() {
             << std::endl
             << "'SA' => Simulated Annealing - **DANGER: High chance of "
             << std::endl
-            << "getting stuck at N <= 30. Only use 30 x x to not risk it"
+            << "getting stuck at N <= 30. Only use 30+ x x to not risk it"
             << std::endl
             << "'SARR' => Simulated Annealing Random Restart - use with N=200+"
+            << std::endl
+            << "'GA' => A bonus that I added after the assignment was due"
             << std::endl;
-
 }
 
 int handleUserInput() {
@@ -812,6 +921,8 @@ int handleUserInput() {
         return 8;
     } else if (request == "sarr") {
         return 9;
+    } else if (request == "ga") {
+        return 10;
     } else {
         std::cout << "That's an invalid choice! If you can't get this program"
                   << std::endl
@@ -827,10 +938,6 @@ int handleUserInput() {
 
 void runRequest(int choice) {
     std::cout
-            << "Congratulations! If you made it this far you're doing better"
-            << std::endl
-            << "than most markers for my assignments!"
-            << std::endl << std::endl
             << "============BENCHMARKING REQUESTS==============="
             << std::endl
             << "Now is the tough part! Enter the bounds of boards that you want to "
@@ -884,6 +991,10 @@ void runRequest(int choice) {
     } else if (choice == 9) {
         // sarr
         benchmarkFunction(simulatedAnnealingRR, lowerBound, upperBound,
+                          increment);
+    } else if (choice == 10) {
+        // GA
+        benchmarkFunction(genetic, lowerBound, upperBound,
                           increment);
     }
     std::cout << "You can request another function (e.g. bfs)!" <<

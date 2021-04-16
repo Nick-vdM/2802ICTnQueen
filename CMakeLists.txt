@@ -5,4 +5,4 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -O3")
 
 
-add_executable(bfs2 BFS2.cpp)
+add_executable(code source_code.cpp)
